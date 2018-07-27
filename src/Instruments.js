@@ -10,61 +10,31 @@
 
 
 
-/* global Errors */
-
-
-
 /**
- * Instruments.jsのルートクラス
- * 
  * @namespace
  * @author Genbu Hase
  */
 const Instruments = (libRoot => {
 	class Instruments {
 		/**
-		 * キーマッピングのデフォルト設定( [ スケール, 相対オクターブ数 ] )
-		 * 
-		 * @return {Object<number, Array<String | Number>>}
+		 * Instruments.jsのルートディレクトリ
+		 * @return {String}
 		 */
-		static get defaultMap () {
-			return {
-				90: ["C", 0],
-				83: ["C#", 0],
-				88: ["D", 0],
-				68: ["D#", 0],
-				67: ["E", 0],
-				86: ["F", 0],
-				71: ["F#", 0],
-				66: ["G", 0],
-				72: ["G#", 0],
-				78: ["A", 1],
-				74: ["A#", 1],
-				77: ["B", 1],
-				188: ["C", 1],
-				76: ["C#", 1],
-				190: ["D", 1],
-				187: ["D#", 1],
-				191: ["E", 1],
-				226: ["F", 1]
-			};
-		}
+		static get libRoot () { return libRoot }
 	}
 
 
 
 	/**
-	 * 基礎音となるノーツ
-	 * 
+	 * ノーツ
 	 * @memberof Instruments
-	 * @author Genbu Hase
 	 */
 	class Note {
-		/** 基礎音の種類 */
+		/** ノーツの種類 */
 		static get NoteType () { return ["A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#"] }
 
 		/**
-		 * 鍵盤番号から基礎音を生成します
+		 * 鍵盤番号からノーツを生成します
 		 * 
 		 * @param {Number} index 鍵盤番号
 		 * @param {Number} [duration] 再生時間
@@ -80,11 +50,11 @@ const Instruments = (libRoot => {
 
 
 		/**
-		 * 基礎音を生成します
+		 * ノーツを生成します
 		 * 
 		 * @param {String} [scale="C"] スケール
 		 * @param {Number} [octave=3] オクターブ数
-		 * @param {Number} [duration=-1] 再生時間[ms] (-1 = 自動停止されません)
+		 * @param {Number} [duration=-1] 再生時間[ms] (-1 = 自動停止しない)
 		 */
 		constructor (scale = "C", octave = 3, duration = -1) {
 			this.scale = scale;
@@ -112,10 +82,8 @@ const Instruments = (libRoot => {
 	}
 
 	/**
-	 * 和音(コード)
-	 * 
+	 * 和音ノーツ(コードノーツ)
 	 * @memberof Instruments
-	 * @author Genbu Hase
 	 */
 	class Chord {
 		/** コードの種類 */
@@ -132,7 +100,7 @@ const Instruments = (libRoot => {
 
 
 		/**
-		 * 基礎音と対応したコードを生成します
+		 * ノーツを基にコードを生成します
 		 * 
 		 * @param {Instruments.Note} rootNote
 		 * @param {Instruments.Chord.ChordType} type
@@ -155,9 +123,9 @@ const Instruments = (libRoot => {
 	 * 直観的な操作を可能にしたWorker
 	 * @author Genbu Hase
 	 */
-	class CommandWorker extends Worker {
+	class CommandableWorker extends Worker {
 		/**
-		 * CommandWorkerを生成します
+		 * CommandableWorkerを生成します
 		 * @param {String} stringUrl Workerとして起動するスクリプト
 		 */
 		constructor (stringUrl) { super(stringUrl) }
@@ -179,7 +147,7 @@ const Instruments = (libRoot => {
 			return new Promise(resolve => {
 				/** @param {MessageEvent} event */
 				const detectorHook = event => {
-					/** @type {CommandWorker.CommandResponse} */
+					/** @type {CommandableWorker.CommandResponse} */
 					const resp = event.data;
 
 					if (resp.command === command && checkFunc ? checkFunc(resp.result) : true) {
@@ -194,7 +162,7 @@ const Instruments = (libRoot => {
 	}
 	
 	/**
-	 * @typedef {Object} CommandWorker.CommandResponse
+	 * @typedef {Object} CommandableWorker.CommandResponse
 	 * @prop {String} command 実行されたコマンド名
 	 * @prop {any} result 実行結果
 	 */
@@ -202,10 +170,8 @@ const Instruments = (libRoot => {
 	
 	
 	/**
-	 * 演奏に使用する楽器クラス
-	 * 
+	 * 演奏に利用する楽器
 	 * @memberof Instruments
-	 * @author Genbu Hase
 	 */
 	const Instrument = (() => {
 		class Instrument extends AudioContext {
@@ -218,7 +184,7 @@ const Instruments = (libRoot => {
 				/** @type {NoteCollection} */
 				this.noteQues = new NoteCollection();
 
-				TIMER.requestCommand("Instrument.register").then(id => {
+				COMMANDER.requestCommand("Instrument.register").then(id => {
 					this.id = id;
 					this.initialized = true;
 				});
@@ -295,7 +261,7 @@ const Instruments = (libRoot => {
 				this.noteQues[noteId] = sound;
 
 				if (0 <= source.duration) {
-					await TIMER.requestCommand("Note.stop", [ this.id, noteId, source.duration ],
+					await COMMANDER.requestCommand("Note.stop", [ this.id, noteId, source.duration ],
 						noteInfo => noteInfo.instrumentId === this.id && noteInfo.noteId === noteId
 					).then(() => this.stop(noteId));
 				}
@@ -353,10 +319,10 @@ const Instruments = (libRoot => {
 	/**
 	 * 遅延処理に利用するコマンドワーカー
 	 * 
-	 * @type {CommandWorker}
+	 * @type {CommandableWorker}
 	 * @memberof Instruments
 	 */
-	const TIMER = new CommandWorker(`${libRoot}/modules/TimingManager.js`);
+	const COMMANDER = new CommandableWorker(`${libRoot}/modules/InstrumentWorker.js`);
 
 
 
@@ -365,14 +331,14 @@ const Instruments = (libRoot => {
 		Note: { value: Note },
 		Chord: { value: Chord },
 
-		TIMER: { value: TIMER, enumerable: true }
+		COMMANDER: { value: COMMANDER, enumerable: true }
 	});
 	
 	Instruments.Instrument = Instrument;
 	Instruments.Note = Note;
 	Instruments.Chord = Chord;
 
-	Instruments.TIMER = TIMER;
+	Instruments.COMMANDER = COMMANDER;
 
 	return Instruments;
 })(
@@ -385,3 +351,7 @@ const Instruments = (libRoot => {
 		return script.src.split("/").slice(0, -1).join("/");
 	})()
 );
+
+
+
+/* global Errors */
