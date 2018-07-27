@@ -1,21 +1,9 @@
-/* global Errors */
-importScripts("./Errors.js");
-
-
-
 /**
  * @namespace
  * @author Genbu Hase
  */
 const InstrumentWorker = (() => {
 	class InstrumentWorker {}
-
-
-
-	/**
-	 * 簡略化関数
-	 */
-	const Utilizes = {};
 
 
 
@@ -44,7 +32,7 @@ const InstrumentWorker = (() => {
 		 * @return {any} 参照されたコマンド
 		 */
 		deepBrowse (schemeStr) {
-			if (!schemeStr) throw new Errors.ArgumentError.ArgumentNotDefinedError("schemeStr", 1);
+			if (!schemeStr) throw new ArgumentError.ArgumentNotDefinedError("schemeStr", 1);
 
 			const nests = schemeStr.split(".");
 
@@ -74,7 +62,9 @@ const InstrumentWorker = (() => {
 	};
 
 	/**
-	 * @typedef {Object} Commander.CommandRequest
+	 * コマンドの要請形式
+	 * 
+	 * @typedef {Object} InstrumentWorker.CommandRequest
 	 * @prop {String} command 実行するコマンド名
 	 * @prop {Array<any>} args コマンドの引数
 	 */
@@ -82,29 +72,30 @@ const InstrumentWorker = (() => {
 
 
 	self.addEventListener("message", event => {
-		/** @type {Commander.CommandRequest} */
+		/** @type {InstrumentWorker.CommandRequest} */
 		const data = event.data;
 	
-		if (!data.command) throw new Errors.ArgumentError.ArgumentNotAcceptableError("command", null, "String");
-		if (!Commander.Commands.deepBrowse(data.command)) throw new ReferenceError("Provided command doesn't exist");
+		if (!data.command) throw new ArgumentError.ArgumentNotAcceptableError("command", null, "String");
+		if (!InstrumentWorker.Commands.deepBrowse(data.command)) throw new ReferenceError("Provided command doesn't exist");
 		if (!data.args) data.args = [];
 	
-		Commander.Commands.deepBrowse(data.command)(...data.args);
+		InstrumentWorker.Commands.deepBrowse(data.command)(...data.args);
 	});
 
 	
 
-	Object.defineProperties(Commander, {
-		instruments: { value: instruments, enumerable: true },
+	Object.defineProperties(InstrumentWorker, {
 		Commands: { value: Commands }
 	});
 
-	Commander.instruments = instruments;
-	Commander.Commands = Commands;
+	InstrumentWorker.Commands = Commands;
 	
-	return Commander;
+	return InstrumentWorker;
 })();
 
 
 
 /* eslint-env worker */
+
+/* global ArgumentError */
+importScripts("./modules/Errors.js");

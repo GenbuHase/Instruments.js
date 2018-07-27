@@ -42,7 +42,7 @@ const Instruments = (libRoot => {
 		 * @return {Note} 生成された基礎音
 		 */
 		static createByIndex (index, duration) {
-			if (typeof index !== "number") throw new Errors.ArgumentError.ArgumentNotAcceptableError("index", 1, "Number");
+			if (typeof index !== "number") throw new ArgumentError.ArgumentNotAcceptableError("index", 1, "Number");
 
 			return new Note(Note.NoteType[index % 12], Math.floor(index / 12) + 1, duration);
 		}
@@ -106,8 +106,8 @@ const Instruments = (libRoot => {
 		 * @param {Instruments.Chord.ChordType} type
 		 */
 		constructor (rootNote, type) {
-			if (!(rootNote instanceof Instruments.Note)) throw new Errors.ArgumentError.ArgumentNotAcceptableError("rootNote", 1, "Note");
-			if (!Array.isArray(type)) throw new Errors.ArgumentError.ArgumentNotAcceptableError("type", 2, "Array<Number>");
+			if (!(rootNote instanceof Instruments.Note)) throw new ArgumentError.ArgumentNotAcceptableError("rootNote", 1, "Note");
+			if (!Array.isArray(type)) throw new ArgumentError.ArgumentNotAcceptableError("type", 2, "Array<Number>");
 			
 			this.root = rootNote;
 			
@@ -121,6 +121,8 @@ const Instruments = (libRoot => {
 
 	/**
 	 * 直観的な操作を可能にしたWorker
+	 * 
+	 * @extends Worker
 	 * @author Genbu Hase
 	 */
 	class CommandableWorker extends Worker {
@@ -135,12 +137,12 @@ const Instruments = (libRoot => {
 		 * 
 		 * @param {String} command 実行するコマンド名
 		 * @param {Array<any>} [args=[]] コマンドの引数
-		 * @param {Function} [checkFunc] コマンドを受け取る追加条件
+		 * @param {CommandableWorker.ConditionDetectEvent} [conditionDetector] コマンドを受け取る追加条件
 		 * 
-		 * @return {Promise<any>} 実行結果が格納されているPromiseオブジェクト
+		 * @return {Promise<any>} 戻り値が格納されているPromiseオブジェクト
 		 */
-		requestCommand (command, args = [], checkFunc) {
-			if (!command) throw new Errors.ArgumentError.ArgumentNotDefinedError("request", 1);
+		requestCommand (command, args = [], conditionDetector) {
+			if (!command) throw new ArgumentError.ArgumentNotDefinedError("request", 1);
 			
 			super.postMessage({ command, args });
 
@@ -150,7 +152,7 @@ const Instruments = (libRoot => {
 					/** @type {CommandableWorker.CommandResponse} */
 					const resp = event.data;
 
-					if (resp.command === command && checkFunc ? checkFunc(resp.result) : true) {
+					if (resp.command === command && conditionDetector ? conditionDetector(resp.result) : true) {
 						this.removeEventListener("message", detectorHook);
 						resolve(resp.result);
 					}
@@ -160,18 +162,29 @@ const Instruments = (libRoot => {
 			});
 		}
 	}
-	
+
 	/**
+	 * コマンドの応答形式
+	 * 
 	 * @typedef {Object} CommandableWorker.CommandResponse
 	 * @prop {String} command 実行されたコマンド名
-	 * @prop {any} result 実行結果
+	 * @prop {any} result コマンドの戻り値
+	 */
+
+	/**
+	 * コマンドが正しく返却されたかどうか判定する関数
+	 * 
+	 * @callback CommandableWorker.ConditionDetectEvent
+	 * @param {any} result 予定されている戻り値
 	 */
 
 	
 	
 	/**
 	 * 演奏に利用する楽器
+	 * 
 	 * @memberof Instruments
+	 * @extends AudioContext
 	 */
 	const Instrument = (() => {
 		class Instrument extends AudioContext {
@@ -183,11 +196,8 @@ const Instruments = (libRoot => {
 				this.initialized = false;
 				/** @type {NoteCollection} */
 				this.noteQues = new NoteCollection();
-
-				COMMANDER.requestCommand("Instrument.register").then(id => {
-					this.id = id;
-					this.initialized = true;
-				});
+				/** @type {CommandableWorker} */
+				this.commander = new CommandableWorker(`${libRoot}/modules/InstrumentWorker.js`);
 			}
 
 			/**
@@ -195,33 +205,6 @@ const Instruments = (libRoot => {
 			 * @return {OscillatorType}
 			 */
 			get type () { return "sine" }
-
-			/**
-			 * イベントフックを登録します
-			 * 
-			 * @param {Instrument.EventType} eventName イベント名
-			 * @param {Function} [callback] コールバック関数
-			 * 
-			 * @return {Promise<Instrument>}
-			 */
-			on (eventName, callback) {
-				switch (eventName) {
-					default:
-						throw new Errors.ArgumentError.ArgumentNotAcceptableError("eventName", 1);
-
-					case "initialized":
-						return new Promise(resolve => {
-							const detector = setInterval(() => {
-								if (this.initialized) {
-									clearInterval(detector);
-
-									callback && callback(this);
-									resolve(this);
-								}
-							});
-						});
-				}
-			}
 
 			/** @param {Number} [frequency] */
 			createOscillator (frequency) {
@@ -243,7 +226,7 @@ const Instruments = (libRoot => {
 				if (!(
 					source instanceof Instruments.Note ||
 					source instanceof Instruments.Chord
-				)) throw new Errors.ArgumentError.ArgumentNotAcceptableError("source", 1, ["Note", "Chord"]);
+				)) throw new ArgumentError.ArgumentNotAcceptableError("source", 1, ["Note", "Chord"]);
 
 				if (source instanceof Instruments.Chord) {
 					const ques = [];
@@ -279,17 +262,12 @@ const Instruments = (libRoot => {
 			}
 		}
 
+
+
 		/**
-		 * @typedef {"initialized"} Instrument.EventType
+		 * 実行中のNoteを格納するコレクション
+		 * @extends Array
 		 */
-
-
-
-		//class NoteHolder
-
-
-
-		/** 実行中のNoteを格納するコレクション */
 		class NoteCollection extends Array {
 			/**
 			 * NoteCollectionを生成します
@@ -322,23 +300,19 @@ const Instruments = (libRoot => {
 	 * @type {CommandableWorker}
 	 * @memberof Instruments
 	 */
-	const COMMANDER = new CommandableWorker(`${libRoot}/modules/InstrumentWorker.js`);
+	const COMMANDER = new CommandableWorker(`${libRoot}/InstrumentWorker.js`);
 
 
 
 	Object.defineProperties(Instruments, {
 		Instrument: { value: Instrument },
 		Note: { value: Note },
-		Chord: { value: Chord },
-
-		COMMANDER: { value: COMMANDER, enumerable: true }
+		Chord: { value: Chord }
 	});
 	
 	Instruments.Instrument = Instrument;
 	Instruments.Note = Note;
 	Instruments.Chord = Chord;
-
-	Instruments.COMMANDER = COMMANDER;
 
 	return Instruments;
 })(
@@ -354,4 +328,4 @@ const Instruments = (libRoot => {
 
 
 
-/* global Errors */
+/* global ArgumentError */
