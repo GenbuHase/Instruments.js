@@ -56,7 +56,7 @@ const InstrumentWorker = (() => {
 			 * @param {Number} afterMilliseconds 待機時間[ms]
 			 */
 			stop (noteId, afterMilliseconds) {
-				self.setTimeout(() => Commands.return("Note.stop", { noteId, afterMilliseconds }), afterMilliseconds);
+				self.setTimeout(() => Commands.return("Note.stop", { noteId, duration: afterMilliseconds }), afterMilliseconds);
 			}
 		}
 	};

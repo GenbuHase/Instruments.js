@@ -21,30 +21,101 @@ const Instruments = (libRoot => {
 		 * @return {String}
 		 */
 		static get libRoot () { return libRoot }
+
+		static get defaultMap () {
+			return {
+				"KeyZ": ["C", 0],
+						"KeyS": ["C#", 0],
+				"KeyX": ["D", 0],
+						"KeyD": ["D#", 0],
+				"KeyC": ["E", 0],
+				"KeyV": ["F", 0],
+						"KeyG": ["F#", 0],
+				"KeyB": ["G", 0],
+						"KeyH": ["G#", 0],
+				"KeyN": ["A", 0],
+						"KeyJ": ["A#", 0],
+				"KeyM": ["B", 0],
+				"Comma": ["C", 1],
+						"KeyL": ["C#", 1],
+				"Period": ["D", 1],
+						"Semicolon": ["D#", 1],
+				"Slash": ["E", 1],
+				"IntlRo": ["F", 1],
+
+				"KeyQ": ["C", 1],
+						"Digit2": ["C#", 1],
+				"KeyW": ["D", 1],
+						"Digit3": ["D#", 1],
+				"KeyE": ["E", 1],
+				"KeyR": ["F", 1],
+						"Digit5": ["F#", 1],
+				"KeyT": ["G", 1],
+						"Digit6": ["G#", 1],
+				"KeyY": ["A", 1],
+						"Digit7": ["A#", 1],
+				"KeyU": ["B", 1],
+				"KeyI": ["C", 2],
+						"Digit9": ["C#", 2],
+				"KeyO": ["D", 2],
+						"Digit0": ["D#", 2],
+				"KeyP": ["E", 2],
+				"BracketLeft": ["F", 2],
+						"Equal": ["F#", 2],
+				"BracketRight": ["G", 2]
+			};
+		}
 	}
 
 
 
 	/**
 	 * ノーツ
+	 * 
 	 * @memberof Instruments
+	 * @extends OscillatorNode
 	 */
-	class Note {
+	class Note extends OscillatorNode {
 		/** ノーツの種類 */
-		static get NoteType () { return ["A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#"] }
+		static get NoteType () { return ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] }
+		
+		/**
+		 * 基準周波数
+		 * @return {Number}
+		 */
+		static get baseFrequency () { return 440 }
 
 		/**
 		 * 鍵盤番号からノーツを生成します
 		 * 
+		 * @param {Instrument} instrument ノーツと紐付ける楽器
 		 * @param {Number} index 鍵盤番号
-		 * @param {Number} [duration] 再生時間
+		 * @param {Number} [duration] 再生時間[ms]
 		 * 
-		 * @return {Note} 生成された基礎音
+		 * @return {Note} 生成されたノーツ
 		 */
-		static createByIndex (index, duration) {
-			if (typeof index !== "number") throw new ArgumentError.ArgumentNotAcceptableError("index", 1, "Number");
+		static createByIndex (instrument, index, duration) {
+			if (!(instrument instanceof Instrument)) throw new ArgumentError.ArgumentNotAcceptableError("instrument", 1, "Instrument");
+			if (typeof index !== "number") throw new ArgumentError.ArgumentNotAcceptableError("index", 2, "Number");
 
-			return new Note(Note.NoteType[index % 12], Math.floor(index / 12) + 1, duration);
+			return new Note(instrument, Note.NoteType[index % 12], Math.floor(index / 12), duration);
+		}
+
+		/**
+		 * 完全音名からノーツを生成します
+		 * 
+		 * @param {Instrument} instrument ノーツと紐付ける楽器
+		 * @param {String} noteName 完全音名(音名 + オクターブ数)
+		 * @param {Number} [duration] 再生時間[ms]
+		 * 
+		 * @return {Note} 生成されたノーツ
+		 */
+		static createByNoteName (instrument, noteName, duration) {
+			if (!(instrument instanceof Instrument)) throw new ArgumentError.ArgumentNotAcceptableError("instrument", 1, "Instrument");
+			if (typeof noteName !== "string") throw new ArgumentError.ArgumentNotAcceptableError("noteName", 2, "String");
+			
+			const nameStructure = noteName.split(/(?=\d)/);
+			return new Note(instrument, nameStructure[0], nameStructure.slice(1).join(""), duration);
 		}
 
 
@@ -52,40 +123,61 @@ const Instruments = (libRoot => {
 		/**
 		 * ノーツを生成します
 		 * 
-		 * @param {String} [scale="C"] スケール
-		 * @param {Number} [octave=3] オクターブ数
+		 * @param {Instrument} instrument ノーツと紐付ける楽器
+		 * @param {String} [noteName="C"] 音名
+		 * @param {Number} [octave=5] オクターブ数
 		 * @param {Number} [duration=-1] 再生時間[ms] (-1 = 自動停止しない)
 		 */
-		constructor (scale = "C", octave = 3, duration = -1) {
-			this.scale = scale;
-			this.octave = octave;
+		constructor (instrument, noteName = "C", octave = 5, duration = -1) {
+			if (!(instrument instanceof Instrument)) throw new ArgumentError.ArgumentNotAcceptableError("instrument", 1, "Instrument");
+			if (!Note.NoteType.includes(noteName)) throw new ArgumentError.ArgumentNotAcceptableError("noteName", 2, "Note.NoteType.*");
+
+			super(instrument);
+
+			/** @type {Instrument} */
+			this.instrument = instrument;
+			/** @type {String} */
+			this.noteName = noteName;
+			/** @type {Number} */
+			this.octave = parseInt(octave);
+			/** @type {Number} */
 			this.duration = duration;
+
+			this.initialize();
 		}
 
 		/**
 		 * 鍵盤番号
 		 * @return {Number}
 		 */
-		get noteIndex () { return Note.NoteType.indexOf(this.scale) + 12 * (this.octave - 1) }
+		get noteIndex () { return Note.NoteType.indexOf(this.noteName) + 12 * this.octave }
+
+		/** 初期化処理を行います */
+		initialize () {
+			const { instrument } = this;
+
+			this.type = instrument.type;
+			this.frequency.value = Note.baseFrequency * Math.pow(2, (this.noteIndex - Note.NoteType.indexOf("A") - 12 * 4) / 12);
+			
+			this.connect(instrument.destination);
+		}
 
 		/**
-		 * 音源の周波数
-		 * @return {Number}
-		 */
-		get frequency () { return 27.500 * Math.pow(2, this.noteIndex / 12) }
-
-		/**
-		 * 文字列化して返します
+		 * 完全音名にして返します
 		 * @return {String}
 		 */
-		toString () { return `${this.scale}${this.octave}` }
+		toString () { return `${this.noteName}${this.octave}` }
 	}
+
+
 
 	/**
 	 * 和音ノーツ(コードノーツ)
+	 * 
 	 * @memberof Instruments
+	 * @extends Array<Note>
 	 */
-	class Chord {
+	class Chord extends Array {
 		/** コードの種類 */
 		static get ChordType () {
 			return {
@@ -102,20 +194,128 @@ const Instruments = (libRoot => {
 		/**
 		 * ノーツを基にコードを生成します
 		 * 
-		 * @param {Instruments.Note} rootNote
-		 * @param {Instruments.Chord.ChordType} type
+		 * @param {Note} rootNote ベースとなるノーツ
+		 * @param {Array<Number>} chordType コードの種類
 		 */
-		constructor (rootNote, type) {
-			if (!(rootNote instanceof Instruments.Note)) throw new ArgumentError.ArgumentNotAcceptableError("rootNote", 1, "Note");
-			if (!Array.isArray(type)) throw new ArgumentError.ArgumentNotAcceptableError("type", 2, "Array<Number>");
+		constructor (rootNote, chordType) {
+			if (!(rootNote instanceof Note)) throw new ArgumentError.ArgumentNotAcceptableError("rootNote", 1, "Note");
+			if (!Array.isArray(chordType)) throw new ArgumentError.ArgumentNotAcceptableError("chordType", 2, "Array<Number>");
 			
+			const notes = [];
+			for (const index of chordType) notes.push(Instruments.Note.createByIndex(rootNote.instrument, rootNote.noteIndex + index, rootNote.duration));
+
+			super(...notes);
+
+			/** @type {Note} */
 			this.root = rootNote;
-			
-			/** @type {Array<Note>} */
-			this.notes = [];
-			for (const index of type) this.notes.push(Instruments.Note.createByIndex(rootNote.noteIndex + index, rootNote.duration));
 		}
 	}
+
+
+
+	/**
+	 * 演奏に利用する楽器
+	 * 
+	 * @memberof Instruments
+	 * @extends AudioContext
+	 */
+	const Instrument = (() => {
+		class Instrument extends AudioContext {
+			/** 楽器を生成します */
+			constructor () {
+				super();
+
+				/** @type {CommandableWorker} */
+				this.commander = new CommandableWorker(`${libRoot}/InstrumentWorker.js`);
+				/** @type {NoteCollection} */
+				this.noteQues = new NoteCollection();
+			}
+
+			/**
+			 * 楽器の波形タイプ
+			 * @return {OscillatorType}
+			 */
+			get type () { return "sine" }
+			
+			/**
+			 * 音源を再生します
+			 * 
+			 * @param {Note | Chord} source 音符 | コード
+			 * @return {Promise<Number | Array<Number>>}
+			 */
+			async play (source) {
+				if (![ Note, Chord ].some(type => source instanceof type)) throw new ArgumentError.ArgumentNotAcceptableError("source", 1, ["Note", "Chord"]);
+
+				if (source instanceof Chord) {
+					const ques = [];
+					for (const note of source) ques.push(this.play(note));
+
+					return await Promise.all(ques);
+				}
+
+
+			
+				source.start(0);
+
+				const noteId = this.noteQues.getNextId();
+				this.noteQues[noteId] = source;
+
+				if (0 <= source.duration) {
+					await this.commander.requestCommand("Note.stop", [ noteId, source.duration ],
+						noteInfo => noteInfo.noteId === noteId && noteInfo.duration === source.duration
+					).then(() => this.stop(noteId));
+				}
+
+				return noteId;
+			}
+
+			/**
+			 * 指定されたノーツを停止します
+			 * @param {Number} noteId ノーツID
+			 */
+			stop (noteId) {
+				this.noteQues[noteId].stop(0);
+				delete this.noteQues[noteId];
+			}
+		}
+
+
+
+		class Piano extends Instrument {
+			constructor () {
+				super();
+			}
+		}
+
+
+
+		/**
+		 * 実行中のNoteを格納するコレクション
+		 * @extends Array
+		 */
+		class NoteCollection extends Array {
+			/**
+			 * NoteCollectionを生成します
+			 * @param {...Note} notes
+			 */
+			constructor (...notes) {
+				super(...notes);
+			}
+
+			/**
+			 * ノーツIDの次の空き番地を返します
+			 * @return {Number} ノーツID
+			 */
+			getNextId () {
+				const index = this.findIndex(note => !note);
+				return index < 0 ? this.length : index;
+			}
+		}
+
+
+
+		return Instrument;
+	})();
 
 
 
@@ -177,130 +377,6 @@ const Instruments = (libRoot => {
 	 * @callback CommandableWorker.ConditionDetectEvent
 	 * @param {any} result 予定されている戻り値
 	 */
-
-	
-	
-	/**
-	 * 演奏に利用する楽器
-	 * 
-	 * @memberof Instruments
-	 * @extends AudioContext
-	 */
-	const Instrument = (() => {
-		class Instrument extends AudioContext {
-			/** 楽器を生成します */
-			constructor () {
-				super();
-
-				/** @type {Boolean} */
-				this.initialized = false;
-				/** @type {NoteCollection} */
-				this.noteQues = new NoteCollection();
-				/** @type {CommandableWorker} */
-				this.commander = new CommandableWorker(`${libRoot}/modules/InstrumentWorker.js`);
-			}
-
-			/**
-			 * 楽器の波形タイプ
-			 * @return {OscillatorType}
-			 */
-			get type () { return "sine" }
-
-			/** @param {Number} [frequency] */
-			createOscillator (frequency) {
-				const oscillator = super.createOscillator();
-				oscillator.type = this.type;
-				frequency && (oscillator.frequency.value = frequency);
-				
-				oscillator.connect(this.destination);
-				return oscillator;
-			}
-			
-			/**
-			 * 音源を再生します
-			 * 
-			 * @param {Note | Instruments.Chord} source 音符 | コード
-			 * @return {Promise<[ Number, Number ]>}
-			 */
-			async play (source) {
-				if (!(
-					source instanceof Instruments.Note ||
-					source instanceof Instruments.Chord
-				)) throw new ArgumentError.ArgumentNotAcceptableError("source", 1, ["Note", "Chord"]);
-
-				if (source instanceof Instruments.Chord) {
-					const ques = [];
-					for (const note of source.notes) ques.push(this.play(note));
-
-					return await Promise.all(ques);
-				}
-
-
-			
-				const sound = this.createOscillator(source.frequency);
-				sound.start(0);
-
-				const noteId = this.noteQues.getNextId();
-				this.noteQues[noteId] = sound;
-
-				if (0 <= source.duration) {
-					await COMMANDER.requestCommand("Note.stop", [ this.id, noteId, source.duration ],
-						noteInfo => noteInfo.instrumentId === this.id && noteInfo.noteId === noteId
-					).then(() => this.stop(noteId));
-				}
-
-				return [ this.id, noteId ];
-			}
-
-			/**
-			 * 指定されたノーツを停止します
-			 * @param {Number} noteId ノーツID
-			 */
-			stop (noteId) {
-				this.noteQues[noteId].stop(0);
-				this.noteQues[noteId] = undefined;
-			}
-		}
-
-
-
-		/**
-		 * 実行中のNoteを格納するコレクション
-		 * @extends Array
-		 */
-		class NoteCollection extends Array {
-			/**
-			 * NoteCollectionを生成します
-			 * @param {...Note} notes
-			 */
-			constructor (...notes) {
-				super(...notes);
-			}
-
-			/**
-			 * ノーツIDの次の空き番地を返します
-			 * @return {Number} ノーツID
-			 */
-			getNextId () {
-				const index = this.findIndex(note => !note);
-				return index < 0 ? this.length : index;
-			}
-		}
-
-
-
-		return Instrument;
-	})();
-
-
-
-	/**
-	 * 遅延処理に利用するコマンドワーカー
-	 * 
-	 * @type {CommandableWorker}
-	 * @memberof Instruments
-	 */
-	const COMMANDER = new CommandableWorker(`${libRoot}/InstrumentWorker.js`);
 
 
 
