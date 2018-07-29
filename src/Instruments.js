@@ -236,6 +236,17 @@ const Instruments = (libRoot => {
 			 * @return {OscillatorType}
 			 */
 			get type () { return "sine" }
+
+			/**
+			 * 楽器に紐づいたノーツを生成します
+			 * 
+			 * @param {String} [noteName] 音名
+			 * @param {Number} [octave] オクターブ数
+			 * @param {Number} [duration] 再生時間[ms]
+			 * 
+			 * @return {Note} 生成されたノーツ
+			 */
+			createNote (noteName, octave, duration) { return new Note(this, noteName, octave, duration) }
 			
 			/**
 			 * 音源を再生します
@@ -285,6 +296,43 @@ const Instruments = (libRoot => {
 			constructor () {
 				super();
 			}
+
+			/** @type {OscillatorType} */
+			get type () { return "sine" }
+
+			/**
+			 * @param {String} [noteName]
+			 * @param {Number} [octave]
+			 * @param {Number} [duration]
+			 * 
+			 * @return {Chord}
+			 */
+			createNote (noteName, octave, duration) {
+				const notes = new Chord(super.createNote(noteName, octave, duration), [0, 12]);
+
+				const gains = [
+					this.createGain(),
+					this.createGain()
+				];
+
+				const now = this.currentTime;
+				gains.forEach((gain, index) => {
+					if (index === 0) {
+						gain.gain.linearRampToValueAtTime(1, now);
+						gain.gain.linearRampToValueAtTime(0, now + 1.60);
+					} else if (index === 1) {
+						gain.gain.linearRampToValueAtTime(0.2, now);
+						gain.gain.linearRampToValueAtTime(0, now + 2.0);
+					}
+				});
+
+				notes.forEach((note, index) => {
+					note.connect(gains[index]);
+					gains[index].connect(this.destination);
+				});
+
+				return notes;
+			}
 		}
 
 
@@ -313,6 +361,12 @@ const Instruments = (libRoot => {
 		}
 
 
+
+		Object.defineProperties(Instrument, {
+			Piano: { value: Piano }
+		});
+
+		Instrument.Piano = Piano;
 
 		return Instrument;
 	})();
